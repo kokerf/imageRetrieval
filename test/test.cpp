@@ -54,7 +54,7 @@ int main(int argc, char const *argv[])
     }
 
 	KdTreeOptions opt;
-	opt.var_threshold = 0.8;
+	opt.var_threshold_ = 0.8;
 	opt.mean_size_ = 100;
 	opt.tree_num_ = 2;
 	AKMeans akm(opt);

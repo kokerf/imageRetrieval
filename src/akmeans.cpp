@@ -1,25 +1,106 @@
 #include <iostream>
 #include <random>
+#include <vector>
+#include <list>
 #include <set>
 
 #include "akmeans.hpp"
+#include "distance.hpp"
+
+bool compare(std::pair<uint32_t, float> i ,std::pair<uint32_t, float> j) { return (i.second <j.second); }
 
 void AKMeans::TrainTrees(std::vector<cv::Mat> &features)
 {
-    if (features[0].rows != 1)
+    if(features[0].rows != 1)
         TransformFeatures(features);
 
-    std::vector<cv::Mat> training_features;
-    //! select some festures as means randomly
-    SelectMeans(features, training_features);
+    //! initial step: select some festures as means randomly
+    std::vector<cv::Mat> means;
+    SelectMeans(features, means);
 
+    //! loop and make means converge
+    for(int t = 0; t < opt_.train_times_; ++t)
+    {
+        //! creat kdtrees by means
+        CreatTrees(means);
+
+        //! find the most matching mean for each features by descending kdtrees
+        std::vector<std::pair<uint32_t, float>> query_results;
+        query_results.resize(features.size());
+        QueryFeatures(features, means, query_results);
+
+        //! count the results by histogram and calculate new means
+        means.clear();
+        float error = CalculateNewMeans(features, means, query_results);
+    }
+    
+}
+
+void AKMeans::CreatTrees(std::vector<cv::Mat> &means)
+{
     trees_.resize(0);
-    for(uint32_t i = 0; i < opt_.tree_num_; ++i)
+    for(int i = 0; i < opt_.tree_num_; ++i)
     {
         trees_.push_back(KdTree(i));
-
-        trees_.back().CreatTree(training_features, opt_);
+        trees_.back().CreatTree(means, opt_);
     }
+}
+
+void AKMeans::QueryFeatures(std::vector<cv::Mat> &total_features, std::vector<cv::Mat> &means,
+        std::vector<std::pair<uint32_t, float>> &results)
+{
+    for(std::vector<cv::Mat>::iterator ft = total_features.begin(); ft != total_features.end(); ++ft)
+    {
+		float dist;
+        int mean_id = QueryFeature(means, *ft, dist);
+    }
+}
+
+int AKMeans::QueryFeature(std::vector<cv::Mat> &means, cv::Mat &qurey_feature, float &out_dist)
+{
+    std::list<Branch> unseen_nodes;
+    for(int i = 0; i < trees_.size(); ++i)
+    {
+        unseen_nodes.push_back(Branch(i, 0, 0.0));
+    }
+
+    std::set<uint32_t> means_ids;
+    int times = 0;
+    while(times++ < opt_.query_times_ && !unseen_nodes.empty())
+    {
+        unseen_nodes.sort();
+        if(unseen_nodes.size() > opt_.queue_size_)
+            unseen_nodes.resize(opt_.queue_size_);
+
+        Branch branch = unseen_nodes.front(); unseen_nodes.pop_front();
+        KdTree &kdt = trees_[branch.tree_id_];
+
+        NodeId node_id = kdt.Descend(qurey_feature, branch.node_id_, unseen_nodes);
+    
+        if(kdt.nodes_[node_id].IsValid())
+            means_ids.insert(kdt.nodes_[node_id].fid_[0]);
+    }
+
+	if(!means_ids.empty())
+    {
+        std::vector<std::pair<uint32_t, float>> results;
+        FindKnn(means, means_ids, qurey_feature, results, 1);
+
+        out_dist = results[0].second;
+        return results[0].first;
+    }
+    else//! it won't happen
+    {
+        std::cout << " Error!!! can not find the mean which this feature belong to!!!" << std::endl;
+        return -1;
+    }
+}
+
+float AKMeans::CalculateNewMeans(std::vector<cv::Mat> &total_features, std::vector<cv::Mat> &means,
+        std::vector<std::pair<uint32_t, float>> &results)
+{
+    //! TODO!!!!
+	return 0;
 }
 
 void AKMeans::TransformFeatures(std::vector<cv::Mat> &features)
@@ -59,6 +140,31 @@ void AKMeans::SelectMeans(std::vector<cv::Mat> &total_features, std::vector<cv::
     {
         select_features.push_back(total_features.at(*it));
     }
+}
+
+void AKMeans::FindKnn(std::vector<cv::Mat> &database, std::set<uint32_t> &mask, cv::Mat &query,
+        std::vector<std::pair<uint32_t, float>> &results, uint32_t k)
+{
+    if(query.rows != 1 || database.empty())//! whether is necessary?
+    {
+        std::cout << "Error input of FindKnn!!!" <<std::endl;
+        return;
+    }
+
+    results.resize(0);
+    for(std::set<uint32_t>::iterator it=mask.begin(); it!=mask.end(); ++it)
+    {
+		Distance DIST;
+        float dist = DIST.distance(database[*it], query);
+
+		results.push_back(std::make_pair(*it, dist));
+    }
+
+    std::sort(results.begin(), results.end(), compare);
+
+	if(k < results.size())
+		results.resize(k);
+
 }
 
 void KdTree::CreatTree(std::vector<cv::Mat> &features, KdtOpt &opt)
@@ -220,9 +326,9 @@ void KdTree::GetSplitDimension(NodeId node_id, std::vector<cv::Mat> &features)
     std::vector<uint32_t> highdims;
     int split_dim = -1; 
     //! choose the dimension to split
-    if(maxvar >= opt_.min_variance) //! what if maxvar be zero? *-*?
+    if(maxvar >= opt_.min_variance_) //! what if maxvar be zero? *-*?
     {
-        float threshold = opt_.var_threshold * maxvar;
+        float threshold = opt_.var_threshold_ * maxvar;
         for(int i = 0; i < ndim; ++i)
         {
             if(!divided_dim[i] && var[i] >= threshold){
@@ -253,4 +359,58 @@ void KdTree::GetSplitDimension(NodeId node_id, std::vector<cv::Mat> &features)
     delete [] sum;
     delete [] sum2;
     delete [] var;
+}
+
+NodeId KdTree::Descend(cv::Mat &qurey_feature, NodeId node_id, std::list<Branch> &unseen_nodes)
+{
+    if(qurey_feature.rows != 1)
+    {
+        std::cout << "Error!!! The qurey_feature's rows is " << qurey_feature.rows <<std::endl;
+        return -1;
+    }
+
+    if(node_id >= nodes_.size() || node_id < 0)
+    {
+        std::cout << " Error when descending at Tree:" 
+        << this->Id() << " Node:" << node_id << std::endl;
+
+        return -1;
+    }
+
+    if(qurey_feature.type() == CV_8UC1)
+    {
+        //! loop to find the leaf node
+        while(!nodes_[node_id].IsLeaf())
+        {
+            Node &qurey_node = nodes_[node_id];
+
+            int dim = qurey_node.split_.dim;
+            float mean = qurey_node.split_.mean;
+
+            float dist = qurey_feature.at<uint8_t>(0, dim) - mean;
+
+            int unseen = -1;
+            if(dist < 0)
+            {
+                unseen = qurey_node.RightChild();
+                node_id = qurey_node.LeftChild();
+            }
+            else
+            {
+                unseen = qurey_node.LeftChild();
+                node_id = qurey_node.RightChild();
+            }
+
+            if(nodes_[unseen].IsValid())
+                unseen_nodes.push_back(Branch(this->Id(), unseen, fabs(dist)));
+
+        }
+    }
+    else if(qurey_feature.type() == CV_32F)
+    {
+        //! TODO!!!
+        return -1;
+    }
+
+    return node_id;
 }
