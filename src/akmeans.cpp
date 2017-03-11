@@ -1,5 +1,6 @@
 #include <iostream>
 #include <random>
+#include <chrono>
 #include <vector>
 #include <list>
 #include <set>
@@ -26,14 +27,13 @@ void AKMeans::TrainTrees(std::vector<cv::Mat> &features)
 
         //! find the most matching mean for each features by descending kdtrees
         std::vector<std::pair<uint32_t, float>> query_results;
-        query_results.resize(features.size());
         QueryFeatures(features, means, query_results);
 
         //! count the results by histogram and calculate new means
-        means.clear();
         float error = CalculateNewMeans(features, means, query_results);
+        std::cout << "# loop: " << t << " error:" << error << std::endl 
+            << "------------------" <<std::endl;
     }
-    
 }
 
 void AKMeans::CreatTrees(std::vector<cv::Mat> &means)
@@ -49,10 +49,12 @@ void AKMeans::CreatTrees(std::vector<cv::Mat> &means)
 void AKMeans::QueryFeatures(std::vector<cv::Mat> &total_features, std::vector<cv::Mat> &means,
         std::vector<std::pair<uint32_t, float>> &results)
 {
+    results.resize(0);
     for(std::vector<cv::Mat>::iterator ft = total_features.begin(); ft != total_features.end(); ++ft)
     {
-		float dist;
+        float dist;
         int mean_id = QueryFeature(means, *ft, dist);
+        results.push_back(std::make_pair(mean_id, dist));
     }
 }
 
@@ -77,11 +79,14 @@ int AKMeans::QueryFeature(std::vector<cv::Mat> &means, cv::Mat &qurey_feature, f
 
         NodeId node_id = kdt.Descend(qurey_feature, branch.node_id_, unseen_nodes);
     
+        //std::cout << "qrF:" << qurey_feature << std::endl;
+        //std::cout << "fdF:" << means[kdt.nodes_[node_id].fid_[0]] << std::endl;
+
         if(kdt.nodes_[node_id].IsValid())
             means_ids.insert(kdt.nodes_[node_id].fid_[0]);
     }
 
-	if(!means_ids.empty())
+    if(!means_ids.empty())
     {
         std::vector<std::pair<uint32_t, float>> results;
         FindKnn(means, means_ids, qurey_feature, results, 1);
@@ -99,8 +104,71 @@ int AKMeans::QueryFeature(std::vector<cv::Mat> &means, cv::Mat &qurey_feature, f
 float AKMeans::CalculateNewMeans(std::vector<cv::Mat> &total_features, std::vector<cv::Mat> &means,
         std::vector<std::pair<uint32_t, float>> &results)
 {
-    //! TODO!!!!
-	return 0;
+    if(total_features.size() != results.size())
+    {
+        std::cout << "Error input of CalculateNewMeans!!!" << std::endl;
+    }
+
+    uint32_t means_num = means.size();
+    uint32_t cols = means[0].cols;
+
+    uint32_t *hist;
+    float *dist;
+    hist = new uint32_t[means_num];
+    dist = new float[means_num];
+    std::fill(hist, hist+means_num, 0);
+    std::fill(dist, dist+means_num, 0.0f);
+    cv::Mat means_temp = cv::Mat::zeros(means_num, cols, CV_32F);
+    for(int i = 0, end = results.size(); i != end; ++i)
+    {
+        int mean_id = results[i].first;
+        hist[mean_id] ++;
+        dist[mean_id] += results[i].second;
+
+        cv::Mat &data = total_features[i];
+        const uint8_t *pin;
+        float *pout;
+        pin = data.ptr<uint8_t>(0);
+        pout = means_temp.ptr<float>(mean_id);
+        for(int j = 0; j < cols; ++j, pin++, pout++)
+        {
+            *pout += *pin;
+        }
+    }
+
+    float error = 0;
+    for(int i = 0; i < means_num; ++i)
+    {
+        cv::Mat &mean = means[i];
+        //std::cout << "mean " << i << ": " << means[i] << std::endl;
+        means_temp.row(i).convertTo(mean,CV_8UC1, 1.0/hist[i]);
+        //std::cout << "mean " << i << ": " << means[i] << std::endl;
+
+        dist[i] /= hist[i];
+        error += dist[i];
+    }
+        
+/*  int hist_height=256;
+    int scale = 2;
+    int max_val = 100;
+    cv::Mat hist_img = cv::Mat::zeros(hist_height, means_num*scale, CV_8UC3);
+    for(int i = 0; i< means_num; i++)    
+    {    
+        float bin_val = hist[i];    
+        int intensity = cvRound(bin_val*hist_height/max_val);
+ 
+        cv::rectangle(hist_img, cv::Point(i*scale,hist_height-1),    
+            cv::Point((i+1)*scale - 1, hist_height - intensity),    
+            CV_RGB(255,255,255));
+    }  
+  
+    cv::imshow("histogram", hist_img);
+    cv::waitKey(0);*/
+
+    delete [] hist;
+    delete [] dist;
+
+    return error/means_num;
 }
 
 void AKMeans::TransformFeatures(std::vector<cv::Mat> &features)
@@ -126,7 +194,8 @@ void AKMeans::SelectMeans(std::vector<cv::Mat> &total_features, std::vector<cv::
     uint32_t mean_size = opt_.mean_size_;
     //select_features.clear();
 
-    std::default_random_engine generator;
+    unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+    std::default_random_engine generator(seed);
     std::uniform_int_distribution<uint32_t> distribution(0, total_features.size()-1);
 
     std::set<uint32_t> select;
@@ -154,17 +223,16 @@ void AKMeans::FindKnn(std::vector<cv::Mat> &database, std::set<uint32_t> &mask, 
     results.resize(0);
     for(std::set<uint32_t>::iterator it=mask.begin(); it!=mask.end(); ++it)
     {
-		Distance DIST;
+        Distance DIST;
         float dist = DIST.distance(database[*it], query);
 
-		results.push_back(std::make_pair(*it, dist));
+        results.push_back(std::make_pair(*it, dist));
     }
 
     std::sort(results.begin(), results.end(), compare);
 
-	if(k < results.size())
-		results.resize(k);
-
+    if(k < results.size())
+        results.resize(k);
 }
 
 void KdTree::CreatTree(std::vector<cv::Mat> &features, KdtOpt &opt)
@@ -192,7 +260,8 @@ void KdTree::CreatTree(std::vector<cv::Mat> &features, KdtOpt &opt)
     Splitting(0, features);
 
     std::cout << "Tree: " << this->Id() 
-            << " nodes:"<< nodes_.size() << std::endl;
+    << " nodes:"<< nodes_.size() 
+    << " height:" << this->Height() << std::endl;
 
 }
 
@@ -214,11 +283,12 @@ void KdTree::Splitting(NodeId parent_id, std::vector<cv::Mat> &features)
 
     //! creat child nodes
     Node lChild(nodes_.size());
-    Node rChild(nodes_.size()+1);
+    Node rChild(nodes_.size() + 1);
 
     lChild.SetParent(parent);
     rChild.SetParent(parent);
     parent.SetChild(lChild, rChild);
+    this->UpdateHeight(parent.Depth() + 1);
     //parent.SetVisited();
 
     //! assign features to child nodes
@@ -229,7 +299,7 @@ void KdTree::Splitting(NodeId parent_id, std::vector<cv::Mat> &features)
     for(std::vector<uint32_t>::iterator i = parent.fid_.begin(), end = parent.fid_.end(); i != end; ++i)
     {
         //! for CV_8UC1
-        if(features[*i].at<uint8_t>(0,dim) < mean)
+        if(features[*i].at<uint8_t>(0, dim) < mean)
         {
             lChild.fid_.push_back(*i);
         }
@@ -263,7 +333,7 @@ void KdTree::GetSplitDimension(NodeId node_id, std::vector<cv::Mat> &features)
     node.split_.dim = -1;
 
     uint32_t feature_num = node.fid_.size();
-    if(feature_num == 1)
+    if(feature_num <= 1)
         return;
 
     uint32_t ndim = features[0].cols;
@@ -309,9 +379,15 @@ void KdTree::GetSplitDimension(NodeId node_id, std::vector<cv::Mat> &features)
         //! TODO!!!
     }
 
+/*  for(int i = 0; i < 4; i++)
+    {
+        std::cout << "F" << i << features[i] << std::endl;
+    }*/
+
     float *var;
     var = new float[ndim];
     float maxvar = -1;
+    int split_dim = -1;
     for(int i = 0; i < ndim; ++i)
     {
         sum[i] /= feature_num;
@@ -320,11 +396,11 @@ void KdTree::GetSplitDimension(NodeId node_id, std::vector<cv::Mat> &features)
 
         if(var[i] > maxvar){
             maxvar = var[i];
+            split_dim = i;
         }
     }
 
     std::vector<uint32_t> highdims;
-    int split_dim = -1; 
     //! choose the dimension to split
     if(maxvar >= opt_.min_variance_) //! what if maxvar be zero? *-*?
     {
@@ -339,7 +415,8 @@ void KdTree::GetSplitDimension(NodeId node_id, std::vector<cv::Mat> &features)
         if(!highdims.empty())
         {
             //! in wondows os, the random_engine is impliemented by rand_s(), so ...
-            std::default_random_engine generator;
+            unsigned seed = std::chrono::system_clock::now().time_since_epoch().count();
+            std::default_random_engine generator(seed);
             std::uniform_int_distribution<uint32_t> distribution(0, highdims.size()-1);
             split_dim = highdims.at(distribution(generator));
         }
@@ -352,7 +429,13 @@ void KdTree::GetSplitDimension(NodeId node_id, std::vector<cv::Mat> &features)
     }
     else
     {   
+        std::cout << "============================================" << node.Id() << std::endl;
         std::cout << " Do not find split dimension in node: " << node.Id() << std::endl;
+        for (int i = 0; i < node.fid_.size(); i++)
+        {
+            std::cout << features[node.fid_[i]] << std::endl;
+        }
+
     }
 
     delete [] divided_dim;
@@ -380,6 +463,7 @@ NodeId KdTree::Descend(cv::Mat &qurey_feature, NodeId node_id, std::list<Branch>
     if(qurey_feature.type() == CV_8UC1)
     {
         //! loop to find the leaf node
+        //std::cout << "dim:" << std::endl;
         while(!nodes_[node_id].IsLeaf())
         {
             Node &qurey_node = nodes_[node_id];
@@ -403,8 +487,9 @@ NodeId KdTree::Descend(cv::Mat &qurey_feature, NodeId node_id, std::list<Branch>
 
             if(nodes_[unseen].IsValid())
                 unseen_nodes.push_back(Branch(this->Id(), unseen, fabs(dist)));
-
+            //std::cout << "[" << dim << "," << mean << "] ";
         }
+        //std::cout << std::endl;
     }
     else if(qurey_feature.type() == CV_32F)
     {

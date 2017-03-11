@@ -9,7 +9,7 @@
 #include <set>
 #include <utility> //! std::pair, std::make_pair
 
-#include <opencv2/core/core.hpp>
+#include <opencv2/opencv.hpp>
 
 //#define URAND ((double)rand() / ((double)RAND_MAX + 1.))
 //get a random number between [X, Y)
@@ -172,7 +172,7 @@ public:
     //std::vector<uint32_t> data_;
     
 public:
-    KdTree(TreeId id) {id_ = id;}
+    KdTree(TreeId id) {id_ = id; height_ = 0;}
 
     KdTree() {id_=-1;}
 
@@ -187,6 +187,10 @@ public:
     void Splitting(NodeId parent_id, std::vector<cv::Mat> &features);
 
     NodeId Descend(cv::Mat &qurey_feature, NodeId node_id, std::list<Branch> &unseen_nodes);
+
+    void UpdateHeight(uint32_t h) {height_ = h;}
+
+    uint32_t Height() {return height_;}
 
 private:
     TreeId id_;
