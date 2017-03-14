@@ -18,6 +18,12 @@
 typedef int32_t NodeId;
 typedef int32_t TreeId;
 
+typedef enum Descriptor
+{
+    ORB = 0,
+	SIFT,
+}Descriptor;
+
 typedef class KdTreeOptions
 {
 public:
@@ -29,6 +35,7 @@ public:
     int query_times_;
     float min_variance_;
     float var_threshold_;
+    Descriptor descriptor_;
 
     KdTreeOptions()
     {
@@ -40,6 +47,7 @@ public:
         this->query_times_ = 5;
         this->min_variance_ = 0.0f;
         this->var_threshold_ = 0.8f;
+		this->descriptor_ = ORB;
     };
 
     KdTreeOptions &operator=(const KdTreeOptions &opt)
@@ -52,6 +60,7 @@ public:
         this->query_times_ = opt.query_times_;
         this->min_variance_ = opt.min_variance_;
         this->var_threshold_ = opt.var_threshold_;
+		this->descriptor_ = opt.descriptor_;
 
         return *this;
     }
@@ -95,7 +104,7 @@ public:
 
     std::vector<uint32_t> fid_;
 
-    cv::Mat descriptor_;
+    //cv::Mat descriptor_;
 public:
 
     Node(NodeId id = -1){
