@@ -98,10 +98,10 @@ int main(int argc, char const *argv[])
     }
 
     KdTreeOptions opt;
-    opt.var_threshold_ = 0.8;
-    opt.mean_size_ = 1000;
-    opt.tree_num_ = 2;
-    opt.descriptor_ = SIFT;
+    opt._var_threshold = 0.8;
+    opt._mean_size = 1000;
+    opt._tree_num = 2;
+    opt._descriptor = SIFT;
     AKMeans akm(opt);
     akm.TrainTrees(features);
 

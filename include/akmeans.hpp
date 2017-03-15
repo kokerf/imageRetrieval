@@ -27,43 +27,43 @@ typedef enum Descriptor
 typedef class KdTreeOptions
 {
 public:
-    int tree_num_;
-    int mean_size_;
-    int max_height_;//! for the random splitting, we can not control the max height of the tree.
-    int queue_size_;
-    int train_times_;
-    int query_times_;
-    float min_variance_;
-    float var_threshold_;
-    float precision_;
-    Descriptor descriptor_;
+    int _tree_num;
+    int _mean_size;
+    int _max_height;//! for the random splitting, we can not control the max height of the tree.
+    int _queue_size;
+    int _train_times;
+    int _query_times;
+    float _min_variance;
+    float _var_threshold;
+    float _precision;
+    Descriptor _descriptor;
 
     KdTreeOptions()
     {
-        this->tree_num_ = 1;
-        this->mean_size_ = 100;
-        this->max_height_ = 0;
-        this->queue_size_ = 20;
-        this->train_times_ = 5;
-        this->query_times_ = 5;
-        this->min_variance_ = 0.0f;
-        this->var_threshold_ = 0.8f;
-        this->precision_ = 0.001f;
-		this->descriptor_ = ORB;
+        this->_tree_num = 1;
+        this->_mean_size = 100;
+        this->_max_height = 0;
+        this->_queue_size = 20;
+        this->_train_times = 5;
+        this->_query_times = 5;
+        this->_min_variance = 0.0f;
+        this->_var_threshold = 0.8f;
+        this->_precision = 0.001f;
+		this->_descriptor = SIFT;
     };
 
     KdTreeOptions &operator=(const KdTreeOptions &opt)
     {
-        this->tree_num_ = opt.tree_num_;
-        this->mean_size_ = opt.mean_size_;
-        this->max_height_ = opt.max_height_;
-        this->queue_size_ = opt.queue_size_;
-        this->train_times_ = opt.train_times_;
-        this->query_times_ = opt.query_times_;
-        this->min_variance_ = opt.min_variance_;
-        this->var_threshold_ = opt.var_threshold_;
-        this->precision_ = opt.precision_;
-		this->descriptor_ = opt.descriptor_;
+        this->_tree_num = opt._tree_num;
+        this->_mean_size = opt._mean_size;
+        this->_max_height = opt._max_height;
+        this->_queue_size = opt._queue_size;
+        this->_train_times = opt._train_times;
+        this->_query_times = opt._query_times;
+        this->_min_variance = opt._min_variance;
+        this->_var_threshold = opt._var_threshold;
+        this->_precision = opt._precision;
+		this->_descriptor = opt._descriptor;
 
         return *this;
     }
@@ -81,21 +81,21 @@ class Branch
 {
 public:
 
-    TreeId tree_id_;
+    TreeId _tree_id;
 
-    NodeId node_id_;
+    NodeId _node_id;
 
-    float distance_;
+    float _distance;
 
 public:
 
     Branch(TreeId tree_id = -1, NodeId node_id = -1, float distance = -1){
-        tree_id_ = tree_id;
-        node_id_ = node_id;
-        distance_ = distance;
+        _tree_id = tree_id;
+        _node_id = node_id;
+        _distance = distance;
     }
 
-    bool operator<(Branch& branch) {return this->distance_ < branch.distance_;}
+    bool operator<(Branch& branch) {return this->_distance < branch._distance;}
     
 };
 
@@ -103,104 +103,104 @@ class Node
 {
 public:
 
-    Split split_;
+    Split _split;
 
-    std::vector<uint32_t> fid_;
+    std::vector<uint32_t> _fid;
 
     //cv::Mat descriptor_;
 public:
 
     Node(NodeId id = -1){
-        id_ = id;
-        parent_id_ = -1;
-        left_child_ = -1;
-        right_child_ = -1;
-        word_id_ = -1;
+        _id = id;
+		_parent_id = -1;
+        _left_child = -1;
+        _right_child = -1;
+        _word_id = -1;
         //visited_ = false;
         //isleaf_ = false;
 
-        if(id_ == 0){depth_ = 0;}
-        else{ depth_ = -1;}
+        if(_id == 0){_depth = 0;}
+        else{ _depth = -1;}
     };
 
-    ~Node() {fid_.clear();};
+    ~Node() {_fid.clear();};
 
-    NodeId Id() {return id_;}
+    NodeId Id() {return _id;}
 
-    NodeId WordId() {return word_id_;}
+    NodeId WordId() {return _word_id;}
 
-    void SetWordId(NodeId id) {word_id_ = id;}
+    void SetWordId(NodeId id) {_word_id = id;}
 
-    NodeId ParentId() {return parent_id_;}
+    NodeId ParentId() {return _parent_id;}
 
-    int Depth() {return depth_;}
+    int Depth() {return _depth;}
 
-    void SetDepth(int depth) {depth_ = depth;}
+    void SetDepth(int depth) {_depth = depth;}
 
 	void SetParent(Node &parent){
-        parent_id_ = parent.Id();
-        depth_ = parent.Depth() + 1;
+        _parent_id = parent.Id();
+        _depth = parent.Depth() + 1;
     }
 
     void SetChild(Node &left, Node &right){
-        left_child_ = left.Id();
-        right_child_ = right.Id();
+        _left_child = left.Id();
+        _right_child = right.Id();
     }
 
-    NodeId LeftChild() {return left_child_;}
+    NodeId LeftChild() {return _left_child;}
 
-    NodeId RightChild() {return right_child_;}
+    NodeId RightChild() {return _right_child;}
 
-    //void SetVisited(){visited_ = true;}
+    //void SetVisited(){_visited_ = true;}
 
-    //bool IsVisited(){return visited_;}
+    //bool IsVisited(){return _visited_;}
 
     //! can be the case: 2->1,1; 3->(2),1 (2)->1,1;
     //! can not be: 2->(2),0 (2)->1,1
     bool IsLeaf(){
-        //if(left_child_==-1 && right_child_==-1)
-        if(fid_.size() == 1)
+        //if(_left_child_==-1 && _right_child_==-1)
+        if(_fid.size() == 1)
             return true;
         else
             return false;
     }
 
-    //bool IsValid() {return !fid_.empty();}
+    //bool IsValid() {return !_fid_.empty();}
 
 private:
-    NodeId id_;
+    NodeId _id;
 
-    NodeId word_id_;
+    NodeId _word_id;
 
-    NodeId parent_id_;
+    NodeId _parent_id;
 
-    NodeId left_child_, right_child_;
+    NodeId _left_child, _right_child;
 
-    int depth_;//! the depth of root node is 0
+    int _depth;//! the depth of root node is 0
 
-    //bool visited_;
+    //bool _visited;
 
-    //bool isleaf_;
+    //bool _isleaf;
 };
 
 class KdTree
 {
 public:
-    KdtOpt opt_;
+    KdtOpt _opt;
 
-    std::vector<Node> nodes_;
-    std::vector<std::pair<Node*, int32_t>> words_;
+    std::vector<Node> _nodes;
+    std::vector<std::pair<Node*, int32_t>> _words;
 
     //std::vector<uint32_t> data_;
     
 public:
-    KdTree(TreeId id) {id_ = id; height_ = 0;}
+    KdTree(TreeId id) {_id = id; _height = 0;}
 
-    KdTree() {id_=-1;}
+    KdTree() {_id=-1;}
 
-    ~KdTree() {nodes_.clear(); words_.clear();}
+    ~KdTree() {_nodes.clear(); _words.clear();}
 
-    TreeId Id() {return id_;}
+    TreeId Id() {return _id;}
 
     void CreatTree(std::vector<cv::Mat> &features, KdtOpt &opt);
 
@@ -214,16 +214,16 @@ public:
     //! For searching
     NodeId Descend(cv::Mat &qurey_feature);
 
-    void UpdateHeight(uint32_t h) {height_ = h;}
+    void UpdateHeight(uint32_t h) {_height = h;}
 
-    uint32_t Height() {return height_;}
+    uint32_t Height() {return _height;}
 
     void GetWords(std::vector<cv::Mat> &means);
 
 private:
-    TreeId id_;
+    TreeId _id;
 
-    uint32_t height_;
+    uint32_t _height;
     
 };
 
@@ -231,23 +231,21 @@ class AKMeans
 {
 public:
 
-    KdtOpt opt_;
+    KdtOpt _opt;
 
-    std::vector<KdTree> trees_;
+    std::vector<KdTree> _trees;
 
-    std::vector<cv::Mat> means_;
+    std::vector<cv::Mat> _means;
 
-    std::vector<float> weights_;//! means' weight
-
-    uint32_t N_;//! number of trainning images
+    std::vector<float> _weights;//! means' weight
 
 public:
 
-    AKMeans(KdtOpt &opt) : opt_(opt) {}
+    AKMeans(KdtOpt &opt) : _opt(opt) {}
 
     //AKMeans();
 
-    ~AKMeans() {trees_.clear();}
+    ~AKMeans() {_trees.clear();}
 
     void TrainTrees(std::vector<cv::Mat> &features);
 
