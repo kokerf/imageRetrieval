@@ -35,6 +35,7 @@ public:
     int query_times_;
     float min_variance_;
     float var_threshold_;
+    float precision_;
     Descriptor descriptor_;
 
     KdTreeOptions()
@@ -47,6 +48,7 @@ public:
         this->query_times_ = 5;
         this->min_variance_ = 0.0f;
         this->var_threshold_ = 0.8f;
+        this->precision_ = 0.001f;
 		this->descriptor_ = ORB;
     };
 
@@ -60,6 +62,7 @@ public:
         this->query_times_ = opt.query_times_;
         this->min_variance_ = opt.min_variance_;
         this->var_threshold_ = opt.var_threshold_;
+        this->precision_ = opt.precision_;
 		this->descriptor_ = opt.descriptor_;
 
         return *this;
@@ -112,6 +115,7 @@ public:
         parent_id_ = -1;
         left_child_ = -1;
         right_child_ = -1;
+        word_id_ = -1;
         //visited_ = false;
         //isleaf_ = false;
 
@@ -122,6 +126,10 @@ public:
     ~Node() {fid_.clear();};
 
     NodeId Id() {return id_;}
+
+    NodeId WordId() {return word_id_;}
+
+    void SetWordId(NodeId id) {word_id_ = id;}
 
     NodeId ParentId() {return parent_id_;}
 
@@ -147,17 +155,22 @@ public:
 
     //bool IsVisited(){return visited_;}
 
+    //! can be the case: 2->1,1; 3->(2),1 (2)->1,1;
+    //! can not be: 2->(2),0 (2)->1,1
     bool IsLeaf(){
-        if(left_child_==-1 && right_child_==-1)
+        //if(left_child_==-1 && right_child_==-1)
+        if(fid_.size() == 1)
             return true;
         else
             return false;
     }
 
-    bool IsValid() {return !fid_.empty();}
+    //bool IsValid() {return !fid_.empty();}
 
 private:
     NodeId id_;
+
+    NodeId word_id_;
 
     NodeId parent_id_;
 
@@ -176,7 +189,7 @@ public:
     KdtOpt opt_;
 
     std::vector<Node> nodes_;
-    std::vector<uint32_t> leaf_nodes_;
+    std::vector<std::pair<Node*, int32_t>> words_;
 
     //std::vector<uint32_t> data_;
     
@@ -185,7 +198,7 @@ public:
 
     KdTree() {id_=-1;}
 
-    ~KdTree() {nodes_.clear(); leaf_nodes_.clear();}
+    ~KdTree() {nodes_.clear(); words_.clear();}
 
     TreeId Id() {return id_;}
 
@@ -195,11 +208,17 @@ public:
 
     void Splitting(NodeId parent_id, std::vector<cv::Mat> &features);
 
+    //! For trainning
     NodeId Descend(cv::Mat &qurey_feature, NodeId node_id, std::list<Branch> &unseen_nodes);
+
+    //! For searching
+    NodeId Descend(cv::Mat &qurey_feature);
 
     void UpdateHeight(uint32_t h) {height_ = h;}
 
     uint32_t Height() {return height_;}
+
+    void GetWords(std::vector<cv::Mat> &means);
 
 private:
     TreeId id_;
@@ -216,6 +235,12 @@ public:
 
     std::vector<KdTree> trees_;
 
+    std::vector<cv::Mat> means_;
+
+    std::vector<float> weights_;//! means' weight
+
+    uint32_t N_;//! number of trainning images
+
 public:
 
     AKMeans(KdtOpt &opt) : opt_(opt) {}
@@ -226,24 +251,28 @@ public:
 
     void TrainTrees(std::vector<cv::Mat> &features);
 
+    void GetBowVector();
+
 private:
 
-    void CreatTrees(std::vector<cv::Mat> &means);
+    void CreatTrees();
 
-    void TransformFeatures(std::vector<cv::Mat> &features);
+    void TransformFeatures(const std::vector<cv::Mat> &features, std::vector<cv::Mat> &train_features);
 
-    void SelectMeans(std::vector<cv::Mat> &total_features, std::vector<cv::Mat> &select_features);
+    void SelectMeans(std::vector<cv::Mat> &total_features);
 
-    void QueryFeatures(std::vector<cv::Mat> &total_features, std::vector<cv::Mat> &means,
-        std::vector<std::pair<uint32_t, float>> &results);
+    void QueryFeatures(std::vector<cv::Mat> &total_features, std::vector<std::pair<uint32_t, float>> &results);
     
-    int QueryFeature(std::vector<cv::Mat> &means, cv::Mat &qurey_feature, float &out_dist);
+    int QueryFeature(cv::Mat &qurey_feature, float &out_dist);
 
-    float CalculateNewMeans(std::vector<cv::Mat> &total_features, std::vector<cv::Mat> &means,
-        std::vector<std::pair<uint32_t, float>> &results);
+    double CalculateNewMeans(std::vector<cv::Mat> &total_features, std::vector<std::pair<uint32_t, float>> &results);
 
     void FindKnn(std::vector<cv::Mat> &database, std::set<uint32_t> &mask, cv::Mat &query,
         std::vector<std::pair<uint32_t, float>> &results, uint32_t k);
+
+    void GetTreesWords();
+
+    void GetWordsWeight(std::vector<cv::Mat> &total_features);
 };
 
 

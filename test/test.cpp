@@ -74,7 +74,7 @@ int main(int argc, char const *argv[])
     }
 #ifdef USE_CONTRIB
     else if(descriptor == "SIFT")
-        fdetector = cv::xfeatures2d::SIFT::create();
+        fdetector = cv::xfeatures2d::SIFT::create(500);
 #endif
 
     string dir_name = argv[2];
@@ -92,12 +92,14 @@ int main(int argc, char const *argv[])
         if(img.empty()) throw std::runtime_error("Could not open image" + *i);
 
         fdetector->detectAndCompute(img, cv::Mat(), keypoints, descriptors);
+		std::cout << (i - img_file_names.begin()) << " Compute descriptors:" << descriptors.size() << std::endl;
+
         features.push_back(descriptors);
     }
 
     KdTreeOptions opt;
     opt.var_threshold_ = 0.8;
-    opt.mean_size_ = 100;
+    opt.mean_size_ = 1000;
     opt.tree_num_ = 2;
     opt.descriptor_ = SIFT;
     AKMeans akm(opt);
