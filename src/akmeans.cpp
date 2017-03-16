@@ -10,14 +10,14 @@
 
 bool compare(std::pair<uint32_t, float> i ,std::pair<uint32_t, float> j) { return (i.second <j.second); }
 
-void AKMeans::TrainTrees(std::vector<cv::Mat> &features)
+void AKMeans::TrainTrees(const std::vector<cv::Mat> &features)
 {
     if(_opt._descriptor == ORB && features[0].type() != CV_8UC1)
     {
         std::cout << "Wrong type of trainning features!!!" << std::endl;
         return;
     }
-    else if (_opt._descriptor == SIFT && features[0].type() != CV_32F)
+    else if(_opt._descriptor == SIFT && features[0].type() != CV_32F)
     {
         std::cout << "Wrong type of trainning features!!!" << std::endl;
         return;
@@ -52,6 +52,9 @@ void AKMeans::TrainTrees(std::vector<cv::Mat> &features)
             << "------------------" <<std::endl;
     }
 
+    //! use the final means to creat new trees
+    CreatTrees();
+
     GetTreesWords();
 
     GetWordsWeight(features);
@@ -67,18 +70,19 @@ void AKMeans::CreatTrees()
     }
 }
 
-void AKMeans::QueryFeatures(std::vector<cv::Mat> &total_features, std::vector<std::pair<uint32_t, float>> &results)
+void AKMeans::QueryFeatures(const std::vector<cv::Mat> &total_features, std::vector<std::pair<uint32_t, float>> &results)
 {
+	uint32_t feature_size = total_features.size();
     results.resize(0);
-    for(std::vector<cv::Mat>::iterator ft = total_features.begin(); ft != total_features.end(); ++ft)
+    for(uint32_t i = 0; i < feature_size; i++)
     {
         float dist;
-        int mean_id = QueryFeature(*ft, dist);
+        MeanId mean_id = QueryFeature(total_features[i], dist);
         results.push_back(std::make_pair(mean_id, dist));
     }
 }
 
-int AKMeans::QueryFeature(cv::Mat &qurey_feature, float &out_dist)
+MeanId AKMeans::QueryFeature(const cv::Mat &qurey_feature, float &out_dist)
 {
     std::list<Branch> unseen_nodes;
     for(int i = 0; i < _trees.size(); ++i)
@@ -121,7 +125,7 @@ int AKMeans::QueryFeature(cv::Mat &qurey_feature, float &out_dist)
     }
 }
 
-double AKMeans::CalculateNewMeans(std::vector<cv::Mat> &total_features, std::vector<std::pair<uint32_t, float>> &results)
+double AKMeans::CalculateNewMeans(const std::vector<cv::Mat> &total_features, std::vector<std::pair<uint32_t, float>> &results)
 {
     assert(total_features.size() == results.size());
 
@@ -131,7 +135,7 @@ double AKMeans::CalculateNewMeans(std::vector<cv::Mat> &total_features, std::vec
     std::vector<float> dist(means_num, 0.0);
     std::vector<std::vector<uint32_t>> feature_masks;
     feature_masks.resize(_opt._mean_size);
-    for(int i = 0, end = results.size(); i != end; ++i)
+    for(uint32_t i = 0, end = results.size(); i != end; ++i)
     {
         int mean_id = results[i].first;
 
@@ -143,7 +147,7 @@ double AKMeans::CalculateNewMeans(std::vector<cv::Mat> &total_features, std::vec
     }
 
     double error = 0;
-    for(int i = 0; i < means_num; ++i)
+    for(uint32_t i = 0; i < means_num; ++i)
     {
         cv::Mat &new_mean = _means[i];
         std::vector<uint32_t> &mask = feature_masks[i];
@@ -183,9 +187,9 @@ void AKMeans::TransformFeatures(const std::vector<cv::Mat> &features, std::vecto
     train_features.resize(0);
 
     train_features.reserve(features.size()*features[0].rows);
-    for(int n = 0; n < features.size(); n++)
+    for(uint32_t n = 0; n < features.size(); n++)
     {
-        for(int i = 0; i < features[n].rows; ++i)
+        for(uint32_t i = 0; i < features[n].rows; ++i)
         {
             train_features.push_back(features[n].row(i));
         }
@@ -196,7 +200,7 @@ void AKMeans::TransformFeatures(const std::vector<cv::Mat> &features, std::vecto
     //std::swap(train_features, features);
 }
 
-void AKMeans::SelectMeans(std::vector<cv::Mat> &total_features)
+void AKMeans::SelectMeans(const std::vector<cv::Mat> &total_features)
 {
     uint32_t mean_size = _opt._mean_size;
     assert(total_features.size() > mean_size);
@@ -219,7 +223,7 @@ void AKMeans::SelectMeans(std::vector<cv::Mat> &total_features)
     }
 }
 
-void AKMeans::FindKnn(std::vector<cv::Mat> &database, std::set<uint32_t> &mask, cv::Mat &query,
+void AKMeans::FindKnn(const std::vector<cv::Mat> &database, const std::set<uint32_t> &mask, const cv::Mat &query,
         std::vector<std::pair<uint32_t, float>> &results, uint32_t k)
 {
     assert(!database.empty());
@@ -247,11 +251,12 @@ void AKMeans::GetTreesWords()
 {
     for(int i = 0; i < _opt._tree_num; ++i)
     {
-        _trees[i].GetWords(_means);
+        _words.resize(_means.size());
+        _trees[i].GetWords(_means, _words);
     }
 }
 
-void AKMeans::GetWordsWeight(std::vector<cv::Mat> &total_features)
+void AKMeans::GetWordsWeight(const std::vector<cv::Mat> &total_features)
 {
     const uint32_t image_num = total_features.size();
 
@@ -261,7 +266,7 @@ void AKMeans::GetWordsWeight(std::vector<cv::Mat> &total_features)
         std::vector<bool> counted;
         counted.resize(_means.size(), false);
 
-        cv::Mat &features = total_features[n];
+        const cv::Mat &features = total_features[n];
         for(uint32_t i = 0; i < features.rows; i++)
         {
             float dist;
@@ -281,7 +286,19 @@ void AKMeans::GetWordsWeight(std::vector<cv::Mat> &total_features)
     }
 }
 
-void KdTree::CreatTree(std::vector<cv::Mat> &features, KdtOpt &opt)
+void AKMeans::Transform(const cv::Mat &features, BowVector &bow_vector)
+{
+    bow_vector.clear();
+    const uint32_t rows = features.rows;
+    for(int i = 0; i < rows; ++i)
+    {
+        float dist;
+        WordId word_id = QueryFeature(features.row(i), dist);
+        bow_vector.add(word_id, _weights[word_id]);
+    }
+}
+
+void KdTree::CreatTree(const std::vector<cv::Mat> &features, const KdtOpt &opt)
 {
     _opt = opt;
     _nodes.resize(0);
@@ -293,7 +310,7 @@ void KdTree::CreatTree(std::vector<cv::Mat> &features, KdtOpt &opt)
     _nodes.push_back(Node(0));
     Node &root = _nodes.back();
     root._fid.resize(features.size());
-    for(int i = 0; i < features.size(); ++i)
+    for(uint32_t i = 0; i < features.size(); ++i)
     {
         root._fid[i] = i;
     }
@@ -307,7 +324,7 @@ void KdTree::CreatTree(std::vector<cv::Mat> &features, KdtOpt &opt)
 
 }
 
-void KdTree::Splitting(NodeId parent_id, std::vector<cv::Mat> &features)
+void KdTree::Splitting(NodeId parent_id, const std::vector<cv::Mat> &features)
 {
     Node &parent = _nodes[parent_id];
     if(parent._fid.size() == 1)
@@ -390,7 +407,7 @@ void KdTree::Splitting(NodeId parent_id, std::vector<cv::Mat> &features)
     
 }
 
-void KdTree::GetSplitDimension(NodeId node_id, std::vector<cv::Mat> &features)
+void KdTree::GetSplitDimension(NodeId node_id, const std::vector<cv::Mat> &features)
 {
     Node &node = _nodes[node_id];
 
@@ -434,12 +451,12 @@ void KdTree::GetSplitDimension(NodeId node_id, std::vector<cv::Mat> &features)
     //! statistics on each dimension to get variance
     if(features[0].type() == CV_8UC1)//! too have a check!!!!
     {
-        for(int n = 0; n < feature_num; ++n)
+        for(uint32_t n = 0; n < feature_num; ++n)
         {
             const cv::Mat &d = features[node._fid[n]];
             const unsigned char *p = d.ptr<unsigned char>();
 
-            for(int i = 0; i < cols; ++i, ++p, sum+=8)
+            for(uint32_t i = 0; i < cols; ++i, ++p, sum+=8)
             {
                 if(*p & (1 << 7)) ++sum[0];
                 if(*p & (1 << 6)) ++sum[1];
@@ -454,7 +471,7 @@ void KdTree::GetSplitDimension(NodeId node_id, std::vector<cv::Mat> &features)
             sum-=ndim;
         }
 
-        for(int i = 0; i < ndim; ++i)
+        for(uint32_t i = 0; i < ndim; ++i)
         {
             sum[i] /= feature_num;
             var[i] = sum[i] - sum[i]*sum[i];
@@ -467,7 +484,7 @@ void KdTree::GetSplitDimension(NodeId node_id, std::vector<cv::Mat> &features)
     }
     else if(features[0].type() == CV_32F)
     {
-        for(int n = 0; n < feature_num; ++n)
+        for(uint32_t n = 0; n < feature_num; ++n)
         {
             const cv::Mat &d = features[node._fid[n]];
             const float *p = d.ptr<float>();
@@ -481,7 +498,7 @@ void KdTree::GetSplitDimension(NodeId node_id, std::vector<cv::Mat> &features)
             sum2-=ndim;
         }
 
-        for(int i = 0; i < ndim; ++i)
+        for(uint32_t i = 0; i < ndim; ++i)
         {
             sum[i] /= feature_num;
             sum2[i] /= feature_num;
@@ -504,7 +521,7 @@ void KdTree::GetSplitDimension(NodeId node_id, std::vector<cv::Mat> &features)
     if(maxvar >= _opt._min_variance) //! what if maxvar be zero? *-*?
     {
         float threshold = _opt._var_threshold * maxvar;
-        for(int i = 0; i < ndim; ++i)
+        for(uint32_t i = 0; i < ndim; ++i)
         {
             if(!divided_dim[i] && var[i] >= threshold){
                 highdims.push_back(i);
@@ -530,7 +547,7 @@ void KdTree::GetSplitDimension(NodeId node_id, std::vector<cv::Mat> &features)
     {   
         std::cout << "============================================" << node.Id() << std::endl;
         std::cout << " Do not find split dimension in node: " << node.Id() << std::endl;
-        for (int i = 0; i < node._fid.size(); i++)
+        for (uint32_t i = 0; i < node._fid.size(); i++)
         {
             std::cout << features[node._fid[i]] << std::endl;
         }
@@ -543,7 +560,7 @@ void KdTree::GetSplitDimension(NodeId node_id, std::vector<cv::Mat> &features)
     delete [] var;
 }
 
-NodeId KdTree::Descend(cv::Mat &qurey_feature, NodeId node_id, std::list<Branch> &unseen_nodes)
+NodeId KdTree::Descend(const cv::Mat &qurey_feature, NodeId node_id, std::list<Branch> &unseen_nodes)
 {
     if(qurey_feature.rows != 1)
     {
@@ -626,17 +643,17 @@ NodeId KdTree::Descend(cv::Mat &qurey_feature, NodeId node_id, std::list<Branch>
     return node_id;
 }
 
-void KdTree::GetWords(std::vector<cv::Mat> &means)
+void KdTree::GetWords(const std::vector<cv::Mat> &means, std::vector<std::vector<Node*>> &words)
 {
-    _words.resize(0);
-    for(int n = 0, max = _nodes.size(); n < max; n++)
+    TreeId tree_id = _id;
+    for(uint32_t n = 0, max = _nodes.size(); n < max; n++)
     {
         if(_nodes[n].IsLeaf())
         {
             Node & node = _nodes[n];
             uint32_t mean_id = node._fid[0];
-            node.SetWordId(_words.size());
-            _words.push_back(std::make_pair(&_nodes[n], mean_id));
+            node.SetWordId(mean_id);//! let word id be mean id
+			words[mean_id].push_back(&_nodes[n]);
         }
     }
 }

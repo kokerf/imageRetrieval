@@ -14,6 +14,7 @@
 #endif
 
 #include "akmeans.hpp"
+#include "database.hpp"
 
 using std::string;
 
@@ -104,6 +105,18 @@ int main(int argc, char const *argv[])
     opt._descriptor = SIFT;
     AKMeans akm(opt);
     akm.TrainTrees(features);
+
+	DataBaseOptions db_opt;
+	DataBase<AKMeans> db(db_opt, akm);
+	db.AddImages(features);
+
+	QueryResults result;
+	db.query(db._bow_vectors[6], result, 6, -1);
+
+	for (size_t i = 0; i < result.size(); i++)
+	{
+		std::cout << result[i] << std::endl;
+	}
 
 	cv::waitKey(0);
 

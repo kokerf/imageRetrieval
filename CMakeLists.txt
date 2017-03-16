@@ -20,5 +20,11 @@ if(OpenCV_FOUND)
 endif()
 
 include_directories(${PROJECT_SOURCE_DIR}/include)
-add_executable(binfinal test/test.cpp src/akmeans.cpp src/kit.cpp)
+include_directories(${PROJECT_SOURCE_DIR}/Thirdparty/DBow3/src)
+add_executable(binfinal test/test.cpp
+                        src/akmeans.cpp
+                        src/kit.cpp
+                        src/bow_vector.cpp
+                        Thirdparty/DBow3/src/ScoringObject.cpp
+                        Thirdparty/DBow3/src/QueryResults.cpp)
 target_link_libraries(binfinal ${OpenCV_LIBS})

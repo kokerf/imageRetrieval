@@ -11,11 +11,9 @@
 
 #include <opencv2/opencv.hpp>
 
-//#define URAND ((double)rand() / ((double)RAND_MAX + 1.))
-//get a random number between [X, Y)
-//#define RAND(X, Y) (X + URAND * (Y - X))
+#include "bow_vector.hpp"
 
-typedef int32_t NodeId;
+typedef int32_t MeanId;
 typedef int32_t TreeId;
 
 typedef enum Descriptor
@@ -27,6 +25,7 @@ typedef enum Descriptor
 typedef class KdTreeOptions
 {
 public:
+
     int _tree_num;
     int _mean_size;
     int _max_height;//! for the random splitting, we can not control the max height of the tree.
@@ -38,18 +37,20 @@ public:
     float _precision;
     Descriptor _descriptor;
 
+public:
+
     KdTreeOptions()
     {
-        this->_tree_num = 1;
-        this->_mean_size = 100;
-        this->_max_height = 0;
-        this->_queue_size = 20;
-        this->_train_times = 5;
-        this->_query_times = 5;
-        this->_min_variance = 0.0f;
-        this->_var_threshold = 0.8f;
-        this->_precision = 0.001f;
-		this->_descriptor = SIFT;
+        _tree_num = 1;
+        _mean_size = 100;
+        _max_height = 0;
+        _queue_size = 20;
+        _train_times = 5;
+        _query_times = 5;
+        _min_variance = 0.0f;
+        _var_threshold = 0.8f;
+        _precision = 0.001f;
+		_descriptor = SIFT;
     };
 
     KdTreeOptions &operator=(const KdTreeOptions &opt)
@@ -70,11 +71,6 @@ public:
 
 } KdtOpt;
 
-struct Split
-{
-    float mean;
-    int dim;
-};
 
 //! for searching unseen nodes
 class Branch
@@ -103,11 +99,16 @@ class Node
 {
 public:
 
+    struct Split
+    {
+        float mean;
+        int dim;
+    };
+
     Split _split;
 
     std::vector<uint32_t> _fid;
 
-    //cv::Mat descriptor_;
 public:
 
     Node(NodeId id = -1){
@@ -189,7 +190,6 @@ public:
     KdtOpt _opt;
 
     std::vector<Node> _nodes;
-    std::vector<std::pair<Node*, int32_t>> _words;
 
     //std::vector<uint32_t> data_;
     
@@ -198,27 +198,27 @@ public:
 
     KdTree() {_id=-1;}
 
-    ~KdTree() {_nodes.clear(); _words.clear();}
+    ~KdTree() {_nodes.clear();}
 
     TreeId Id() {return _id;}
 
-    void CreatTree(std::vector<cv::Mat> &features, KdtOpt &opt);
+    void CreatTree(const std::vector<cv::Mat> &features, const KdtOpt &opt);
 
-    void GetSplitDimension(NodeId node_id, std::vector<cv::Mat> &features);
+    void GetSplitDimension(NodeId node_id, const std::vector<cv::Mat> &features);
 
-    void Splitting(NodeId parent_id, std::vector<cv::Mat> &features);
+    void Splitting(NodeId parent_id, const std::vector<cv::Mat> &features);
 
     //! For trainning
-    NodeId Descend(cv::Mat &qurey_feature, NodeId node_id, std::list<Branch> &unseen_nodes);
+    NodeId Descend(const cv::Mat &qurey_feature, NodeId node_id, std::list<Branch> &unseen_nodes);
 
     //! For searching
-    NodeId Descend(cv::Mat &qurey_feature);
+    NodeId Descend(const cv::Mat &qurey_feature);
 
     void UpdateHeight(uint32_t h) {_height = h;}
 
     uint32_t Height() {return _height;}
 
-    void GetWords(std::vector<cv::Mat> &means);
+    void GetWords(const std::vector<cv::Mat> &means, std::vector<std::vector<Node*>> &words);
 
 private:
     TreeId _id;
@@ -235,21 +235,24 @@ public:
 
     std::vector<KdTree> _trees;
 
-    std::vector<cv::Mat> _means;
+    std::vector<cv::Mat> _means;//! words
+
+    std::vector<std::vector<Node*>> _words;
 
     std::vector<float> _weights;//! means' weight
 
 public:
 
-    AKMeans(KdtOpt &opt) : _opt(opt) {}
-
-    //AKMeans();
+    AKMeans(const KdtOpt &opt) : _opt(opt) {}
 
     ~AKMeans() {_trees.clear();}
 
-    void TrainTrees(std::vector<cv::Mat> &features);
+    void TrainTrees(const std::vector<cv::Mat> &features);
 
-    void GetBowVector();
+    //! return the mean id of the qurey feature
+    MeanId QueryFeature(const cv::Mat &qurey_feature, float &out_dist);
+
+    void Transform(const cv::Mat &features, BowVector &bow_vector);
 
 private:
 
@@ -257,20 +260,18 @@ private:
 
     void TransformFeatures(const std::vector<cv::Mat> &features, std::vector<cv::Mat> &train_features);
 
-    void SelectMeans(std::vector<cv::Mat> &total_features);
+    void SelectMeans(const std::vector<cv::Mat> &total_features);
 
-    void QueryFeatures(std::vector<cv::Mat> &total_features, std::vector<std::pair<uint32_t, float>> &results);
-    
-    int QueryFeature(cv::Mat &qurey_feature, float &out_dist);
+    void QueryFeatures(const std::vector<cv::Mat> &total_features, std::vector<std::pair<uint32_t, float>> &results);
 
-    double CalculateNewMeans(std::vector<cv::Mat> &total_features, std::vector<std::pair<uint32_t, float>> &results);
+    double CalculateNewMeans(const std::vector<cv::Mat> &total_features, std::vector<std::pair<uint32_t, float>> &results);
 
-    void FindKnn(std::vector<cv::Mat> &database, std::set<uint32_t> &mask, cv::Mat &query,
+    void FindKnn(const std::vector<cv::Mat> &database, const std::set<uint32_t> &mask, const cv::Mat &query,
         std::vector<std::pair<uint32_t, float>> &results, uint32_t k);
 
     void GetTreesWords();
 
-    void GetWordsWeight(std::vector<cv::Mat> &total_features);
+    void GetWordsWeight(const std::vector<cv::Mat> &total_features);
 };
 
 
